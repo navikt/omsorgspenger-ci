@@ -1,0 +1,1 @@
+# omsorgspenger-ci
