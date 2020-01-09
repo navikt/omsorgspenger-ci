@@ -7,5 +7,5 @@ brew install go
 mkdir -p ~/go/bin
 echo "export PATH=\"$HOME/go/bin:$PATH\"" >> $HOME/.zsh
 source $HOME/.zsh
-go install github.com/navikt/omsorgspenger-ci/deploy
+go get github.com/navikt/omsorgspenger-ci/deploy
 ```
