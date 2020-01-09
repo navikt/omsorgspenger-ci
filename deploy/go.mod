@@ -1,4 +1,4 @@
-module github.com/navikt/sosialhjelp-ci-scripts/deploy
+module github.com/navikt/omsorgspenger-ci/deploy
 
 go 1.12
 
