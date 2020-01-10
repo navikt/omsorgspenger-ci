@@ -5,9 +5,9 @@ Hjelpefiler for deployment og ci
 ```bash
 brew install go
 mkdir -p ~/go/bin
-echo "export PATH=\"$HOME/go/bin:$PATH\"" >> $HOME/.zsh
+echo "export PATH=\"$HOME/go/bin:$PATH\"" >> $HOME/.zshrc
 git clone git@github.com:navikt/omsorgspenger-ci.git
 cd deploy
 go install
-source $HOME/.zsh
+source $HOME/.zshrc
 ```
