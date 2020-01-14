@@ -1,6 +1,9 @@
 package main
 
-import _ "k8s.io/client-go/plugin/pkg/client/auth"
+import (
+	"gopkg.in/src-d/go-git.v4/plumbing/object"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/azure"
+)
 import (
 	"context"
 	"encoding/json"
@@ -25,9 +28,11 @@ import (
 )
 
 func main() {
+
 	environment, shortHash, tag, repoName, branchName := getRepoInfo()
-	if os.Args[1] == "v" {
+	if len(os.Args) > 1 && os.Args[1] == "v" {
 		getVersionFromKube(repoName)
+		return
 	}
 	CheckArgs("<environment>\nWhere cwd is a repo and environment is prod | q \nThe head ref is matched against tags.")
 
@@ -51,6 +56,27 @@ func getVersionFromKube(repoName string) {
 	CheckIfError(err)
 	for _, pod := range podList.Items {
 		if strings.HasPrefix(pod.Name, repoName) {
+			shortHash := pod.Spec.Containers[0].Image[strings.LastIndex(pod.Spec.Containers[0].Image, "-")+1:]
+			Info(shortHash)
+
+			r, err := git.PlainOpen(".")
+			CheckIfError(err)
+			iter, err := r.References()
+			err = iter.ForEach(func(ref *plumbing.Reference) error {
+				h := ref.Hash().String()
+				if strings.HasPrefix(h, shortHash) {
+
+					cIter, err := r.Log(&git.LogOptions{From: ref.Hash()})
+					CheckIfError(err)
+					err = cIter.ForEach(func(c *object.Commit) error {
+						fmt.Println(c)
+
+						return nil
+					})
+				}
+				return nil
+			})
+			CheckIfError(err)
 			Info("%s %s %s", strings.TrimSuffix(config.Host[18:], ".nais.io:14124"), pod.Name, pod.Spec.Containers[0].Image)
 		}
 	}
