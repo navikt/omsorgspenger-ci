@@ -21,68 +21,24 @@ import (
 func main() {
 	CheckArgs("<environment>\nWhere cwd is a repo and environment is prod | q \nThe head ref is matched against tags.")
 
-	r, err := git.PlainOpen(".")
-	CheckIfError(err)
+	environment, shortHash, tag, repoName, branchName := getRepoInfo()
 
-	_ = r.Fetch(&git.FetchOptions{
-		RemoteName: "origin",
-	})
+	deploy(environment, branchName, repoName, shortHash, tag)
+}
 
-	head, err := r.Head()
-	CheckIfError(err)
-
-	config, err := r.Config()
-	CheckIfError(err)
-
-	url := config.Remotes["origin"].URLs[0]
-	index := strings.LastIndex(url, "/")
-	environment := os.Args[1]
-	branch := head.Name().Short()
-
-	CheckIfError(err)
-	output, err := exec.Command("git", "rev-parse", "--short", "HEAD").CombinedOutput()
-	CheckIfError(err)
-	shortHash := strings.TrimSpace(string(output))
-
-	promptForAncestor(branch, r)
-
-	commit, err := r.CommitObject(head.Hash())
-	tag := fmt.Sprintf("%s-%s", commit.Author.When.Format("2006.01.02"), shortHash)
-
-	repoName := url[index+1 : len(url)-4]
-
-	if environment == "prod" {
-		prompt := promptui.Prompt{
-			Label:     "Deploy to prod?",
-			IsConfirm: true,
-		}
-
-		_, err := prompt.Run()
-		if err != nil {
-			os.Exit(0)
-			return
-		}
-		CheckIfError(err)
-
-	}
-
+func deploy(environment string, branchName string, repoName string, shortHash string, tag string) {
+	promtGuardProd(environment, branchName)
 	conf := readConfig()
-
 	githubClient, ctx := getGithubClient(conf)
-
 	promptConfirm(repoName, environment)
-
 	repo, _, err := githubClient.Repositories.Get(ctx, "navikt", repoName)
 	CheckIfError(err)
-
 	env := ""
-
 	if environment == "q" {
 		env = "dev-sbs"
 	} else {
 		return
 	}
-
 	var payload = PayloadGithub{
 		Ref:              shortHash,
 		Environment:      env,
@@ -95,25 +51,69 @@ func main() {
 		},
 	}
 	bytes, err := json.Marshal(payload)
-
 	log.Println(string(bytes))
 	CheckIfError(err)
-
 	reader := strings.NewReader(string(bytes))
-
 	req, err := http.NewRequest("POST", repo.GetDeploymentsURL(), reader)
 	CheckIfError(err)
-
 	req.Header.Set("Authorization", "token "+conf.Githubtoken)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Media-Type", "application/vnd.github.ant-man-preview+json")
-
 	resp, err := http.DefaultClient.Do(req)
 	CheckIfError(err)
-
 	body, err := ioutil.ReadAll(resp.Body)
 	CheckIfError(err)
 	Info("Check build status:" + string(body))
+}
+
+func promtGuardProd(environment string, branchName string) {
+
+	if environment == "prod" {
+		if branchName != "master" {
+			Warning("Can not deploy a non master branch to prod")
+			os.Exit(0)
+		}
+		prompt := promptui.Prompt{
+			Label:     "Deploy to prod?",
+			IsConfirm: true,
+		}
+
+		_, err := prompt.Run()
+		if err != nil {
+			os.Exit(0)
+		}
+		CheckIfError(err)
+	}
+}
+
+func getRepoInfo() (environment, shorthash, tag, reponame, branchName string) {
+	r, err := git.PlainOpen(".")
+	CheckIfError(err)
+	_ = r.Fetch(&git.FetchOptions{
+		RemoteName: "origin",
+	})
+	head, err := r.Head()
+	CheckIfError(err)
+	config, err := r.Config()
+	CheckIfError(err)
+	url := config.Remotes["origin"].URLs[0]
+	index := strings.LastIndex(url, "/")
+	environment = os.Args[1]
+	branchName = head.Name().Short()
+	CheckIfError(err)
+
+	output, err := exec.Command("git", "rev-parse", "--short", "HEAD").CombinedOutput()
+	CheckIfError(err)
+	shortHash := strings.TrimSpace(string(output))
+
+	promptForAncestor(branchName, r)
+	commit, err := r.CommitObject(head.Hash())
+	tag = fmt.Sprintf("%s-%s", commit.Author.When.Format("2006.01.02"), shortHash)
+
+	repoName := url[index+1 : len(url)-4]
+	CheckIfError(err)
+
+	return environment, shortHash, tag, repoName, branchName
 }
 
 func promptForAncestor(branch string, r *git.Repository) {
