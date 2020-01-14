@@ -1,7 +1,6 @@
 package main
 
 import (
-	"gopkg.in/src-d/go-git.v4/plumbing/object"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/azure"
 )
 import (
@@ -57,31 +56,72 @@ func getVersionFromKube(repoName string) {
 	for _, pod := range podList.Items {
 		if strings.HasPrefix(pod.Name, repoName) {
 			shortHash := pod.Spec.Containers[0].Image[strings.LastIndex(pod.Spec.Containers[0].Image, "-")+1:]
-			Info(shortHash)
 
 			r, err := git.PlainOpen(".")
+			_ = r.Fetch(&git.FetchOptions{
+				RemoteName: "origin",
+			})
+			output, err := exec.Command("git", "rev-parse", shortHash).CombinedOutput()
 			CheckIfError(err)
-			iter, err := r.References()
-			err = iter.ForEach(func(ref *plumbing.Reference) error {
-				h := ref.Hash().String()
-				if strings.HasPrefix(h, shortHash) {
+			longHash := strings.TrimSpace(string(output))
 
-					cIter, err := r.Log(&git.LogOptions{From: ref.Hash()})
-					CheckIfError(err)
-					err = cIter.ForEach(func(c *object.Commit) error {
-						fmt.Println(c)
-
-						return nil
-					})
+			hash := plumbing.NewHash(longHash)
+			commit, err := r.CommitObject(hash)
+			CheckIfError(err)
+			rs, err := r.References()
+			CheckIfError(err)
+			memo := make(map[plumbing.Hash]bool)
+			CheckIfError(rs.ForEach(func(ref *plumbing.Reference) error {
+				n := ref.Name()
+				if n.IsBranch() {
+					b, err := r.Reference(n, true)
+					if err != nil {
+						return err
+					}
+					v, err := reaches(r, b.Hash(), hash, memo)
+					if err != nil {
+						return err
+					}
+					if v {
+						Info(n.String())
+					}
 				}
 				return nil
-			})
+			}))
+
+			Info("%s %s %s", commit.Author.Name, commit.Author.When.String(), commit.Message)
 			CheckIfError(err)
 			Info("%s %s %s", strings.TrimSuffix(config.Host[18:], ".nais.io:14124"), pod.Name, pod.Spec.Containers[0].Image)
 		}
 	}
 }
 
+// reaches returns true if commit, c, can be reached from commit, start. Results are memoized in memo.
+func reaches(r *git.Repository, start, c plumbing.Hash, memo map[plumbing.Hash]bool) (bool, error) {
+	if v, ok := memo[start]; ok {
+		return v, nil
+	}
+	if start == c {
+		memo[start] = true
+		return true, nil
+	}
+	co, err := r.CommitObject(start)
+	if err != nil {
+		return false, err
+	}
+	for _, p := range co.ParentHashes {
+		v, err := reaches(r, p, c, memo)
+		if err != nil {
+			return false, err
+		}
+		if v {
+			memo[start] = true
+			return true, nil
+		}
+	}
+	memo[start] = false
+	return false, nil
+}
 func deploy(environment string, branchName string, repoName string, shortHash string, tag string) {
 	promtGuardProd(environment, branchName)
 	conf := readConfig()
