@@ -1,29 +1,59 @@
-package deploy
+package main
 
+import _ "k8s.io/client-go/plugin/pkg/client/auth"
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/google/go-github/github"
+	"github.com/manifoldco/promptui"
 	"golang.org/x/oauth2"
+	"gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"
 	"io/ioutil"
+	apiv1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/homedir"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
-
-	"github.com/manifoldco/promptui"
-	"gopkg.in/src-d/go-git.v4"
 )
 
 func main() {
+	environment, shortHash, tag, repoName, branchName := getRepoInfo()
+	if os.Args[1] == "v" {
+		getVersionFromKube(repoName)
+	}
 	CheckArgs("<environment>\nWhere cwd is a repo and environment is prod | q \nThe head ref is matched against tags.")
 
-	environment, shortHash, tag, repoName, branchName := getRepoInfo()
-
 	deploy(environment, branchName, repoName, shortHash, tag)
+}
+
+func getVersionFromKube(repoName string) {
+	var kubeconfig string
+	if home := homedir.HomeDir(); home != "" {
+		kubeconfig = filepath.Join(home, ".kube", "config")
+	} else {
+		kubeconfig = filepath.Join(os.Getenv("KUBECONFIG"), "config")
+	}
+	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	CheckIfError(err)
+	clientset, err := kubernetes.NewForConfig(config)
+	CheckIfError(err)
+	pods := clientset.CoreV1().Pods(apiv1.NamespaceDefault)
+	CheckIfError(err)
+	podList, err := pods.List(metav1.ListOptions{})
+	CheckIfError(err)
+	for _, pod := range podList.Items {
+		if strings.HasPrefix(pod.Name, repoName) {
+			Info("%s %s %s", strings.TrimSuffix(config.Host[18:], ".nais.io:14124"), pod.Name, pod.Spec.Containers[0].Image)
+		}
+	}
 }
 
 func deploy(environment string, branchName string, repoName string, shortHash string, tag string) {
@@ -98,7 +128,9 @@ func getRepoInfo() (environment, shorthash, tag, reponame, branchName string) {
 	CheckIfError(err)
 	url := config.Remotes["origin"].URLs[0]
 	index := strings.LastIndex(url, "/")
-	environment = os.Args[1]
+	if len(os.Args) > 1 {
+		environment = os.Args[1]
+	}
 	branchName = head.Name().Short()
 	CheckIfError(err)
 
