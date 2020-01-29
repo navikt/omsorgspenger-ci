@@ -136,10 +136,10 @@ func deploy(environment string, branchName string, repoName string, shortHash st
 		return
 	}
 	var payload = PayloadGithub{
-		Ref:              shortHash,
-		Environment:      env,
-		Auto_merge:       false,
-		Required_context: []string{},
+		Ref:               shortHash,
+		Environment:       env,
+		Auto_merge:        false,
+		Required_contexts: []string{},
 		Payload: Payload{
 			Triggered: true,
 			Image:     repoName,
@@ -315,11 +315,11 @@ type Config struct {
 }
 
 type PayloadGithub struct {
-	Ref              string   `json:"ref"`
-	Environment      string   `json:"environment"`
-	Auto_merge       bool     `json:"auto_merge"`
-	Required_context []string `json:"required_context"`
-	Payload          Payload  `json:"payload"`
+	Ref               string   `json:"ref"`
+	Environment       string   `json:"environment"`
+	Auto_merge        bool     `json:"auto_merge"`
+	Required_contexts []string `json:"required_contexts"`
+	Payload           Payload  `json:"payload"`
 }
 
 type Payload struct {
