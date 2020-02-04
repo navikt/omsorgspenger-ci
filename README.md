@@ -1,6 +1,13 @@
 # omsorgspenger-ci
 Hjelpefiler for deployment og ci
 
+#bruk
+Stå i prosjekt og skriv
+
+```
+deploy dev-sbs
+deploy dev-fss
+```
 # deploy
 ```bash
 brew install go

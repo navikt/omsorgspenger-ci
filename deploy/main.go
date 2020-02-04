@@ -130,8 +130,10 @@ func deploy(environment string, branchName string, repoName string, shortHash st
 	repo, _, err := githubClient.Repositories.Get(ctx, "navikt", repoName)
 	CheckIfError(err)
 	env := ""
-	if environment == "q" {
+	if environment == "dev-sbs" {
 		env = "dev-sbs"
+	} else if environment == "dev-fss" {
+		env = "dev-fss"
 	} else {
 		return
 	}
