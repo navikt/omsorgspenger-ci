@@ -1,9 +1,6 @@
 package main
 
 import (
-	_ "k8s.io/client-go/plugin/pkg/client/auth/azure"
-)
-import (
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,87 +10,20 @@ import (
 	"gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"
 	"io/ioutil"
-	apiv1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/util/homedir"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 )
 
 func main() {
 
 	environment, shortHash, tag, repoName, branchName := getRepoInfo()
-	if len(os.Args) > 1 && os.Args[1] == "v" {
-		getVersionFromKube(repoName)
-		return
-	}
+
 	CheckArgs("<environment>\nWhere cwd is a repo and environment is prod | q \nThe head ref is matched against tags.")
 
 	deploy(environment, branchName, repoName, shortHash, tag)
-}
-
-func getVersionFromKube(repoName string) {
-	var kubeconfig string
-	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = filepath.Join(home, ".kube", "config")
-	} else {
-		kubeconfig = filepath.Join(os.Getenv("KUBECONFIG"), "config")
-	}
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	CheckIfError(err)
-	clientset, err := kubernetes.NewForConfig(config)
-	CheckIfError(err)
-	pods := clientset.CoreV1().Pods(apiv1.NamespaceDefault)
-	CheckIfError(err)
-	podList, err := pods.List(metav1.ListOptions{})
-	CheckIfError(err)
-	for _, pod := range podList.Items {
-		if strings.HasPrefix(pod.Name, repoName) {
-			shortHash := pod.Spec.Containers[0].Image[strings.LastIndex(pod.Spec.Containers[0].Image, "-")+1:]
-
-			r, err := git.PlainOpen(".")
-			_ = r.Fetch(&git.FetchOptions{
-				RemoteName: "origin",
-			})
-			output, err := exec.Command("git", "rev-parse", shortHash).CombinedOutput()
-			CheckIfError(err)
-			longHash := strings.TrimSpace(string(output))
-
-			hash := plumbing.NewHash(longHash)
-			commit, err := r.CommitObject(hash)
-			CheckIfError(err)
-			rs, err := r.References()
-			CheckIfError(err)
-			memo := make(map[plumbing.Hash]bool)
-			CheckIfError(rs.ForEach(func(ref *plumbing.Reference) error {
-				n := ref.Name()
-				if n.IsBranch() {
-					b, err := r.Reference(n, true)
-					if err != nil {
-						return err
-					}
-					v, err := reaches(r, b.Hash(), hash, memo)
-					if err != nil {
-						return err
-					}
-					if v {
-						Info(n.String())
-					}
-				}
-				return nil
-			}))
-
-			Info("%s %s %s", commit.Author.Name, commit.Author.When.String(), commit.Message)
-			CheckIfError(err)
-			Info("%s %s %s", strings.TrimSuffix(config.Host[18:], ".nais.io:14124"), pod.Name, pod.Spec.Containers[0].Image)
-		}
-	}
 }
 
 // reaches returns true if commit, c, can be reached from commit, start. Results are memoized in memo.
