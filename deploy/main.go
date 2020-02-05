@@ -21,7 +21,7 @@ func main() {
 
 	environment, shortHash, tag, repoName, branchName := getRepoInfo()
 
-	CheckArgs("<environment>\nWhere cwd is a repo and environment is prod | q \nThe head ref is matched against tags.")
+	CheckArgs("<environment>\nWhere cwd is a repo and environment is prod | dev-sbs or dev-fss \nThe head ref is matched against tags.")
 
 	deploy(environment, branchName, repoName, shortHash, tag)
 }
